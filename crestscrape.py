@@ -31,30 +31,27 @@ def fetch_json_from_endpoint(crest_request, target_url):
 
     return result
 
-class TypeIdToGraphicFilePath(object):
+class ResourceMapper(object):
     def __init__(self):
         graphics_id_to_file_json = fetch_json_from_endpoint(requests, GRAPHICS_ID_TO_FILE_JSON_URL)
         type_id_to_graphics_id_json = fetch_json_from_endpoint(requests, TYPE_ID_TO_GRAPHICS_ID_JSON_URL)
-        self.d = {}
+        self.d = {
+            "from_graphic_id" : {},
+            "from_type_id": {},
+        }
         for type_id in type_id_to_graphics_id_json.keys():
-            self.d[int(type_id)] = str(graphics_id_to_file_json[str(type_id_to_graphics_id_json[type_id]["graphicID"])]["graphicFile"])
-
-    def __getitem__(self, key):
-        return self.d[key]
-
-
-class GraphicIdToGraphicFilePath(object):
-    def __init__(self):
-        graphics_id_to_file_json = fetch_json_from_endpoint(requests, GRAPHICS_ID_TO_FILE_JSON_URL)
-        self.d = {}
+            self.d["from_type_id"][type_id] = str(graphics_id_to_file_json[str(type_id_to_graphics_id_json[type_id]["graphicID"])]["graphicFile"])
         for graphic_id in graphics_id_to_file_json.keys():
-            self.d[int(graphic_id)] = str(graphics_id_to_file_json[graphic_id]["graphicFile"])
+            self.d["from_graphic_id"][graphic_id] = str(graphics_id_to_file_json[graphic_id]["graphicFile"])
 
-    def __getitem__(self, key):
-        return self.d[key]
+    def get_graphic_file_from_type_id(self, key):
+        return self.d["from_type_id"][key]
 
-type_id_resource_mapper = TypeIdToGraphicFilePath()
-grapic_id_resource_mapper = GraphicIdToGraphicFilePath()
+    def get_graphic_file_from_graphic_id(self, key):
+        return self.d["from_graphic_id"][key]
+
+
+resource_mapper = ResourceMapper()
 
 def get_str_id_from_href(href):
     return href.split("/")[-2]
@@ -94,12 +91,13 @@ class FrameParser(object):
     def parse_frames(self, frame=None):
         if not frame:
             frame = self.first_frame
-        self.parse_frame(frame, self.scene_dict)
-        try:
-            next_frame = fetch_json_from_endpoint(requests, frame["nextFrame"]["href"])
-        except KeyError:
-            return
-        self.parse_frames(next_frame)
+
+        while True:
+            self.parse_frame(frame, self.scene_dict)
+            try:
+                frame = fetch_json_from_endpoint(requests, frame["nextFrame"]["href"])
+            except KeyError:
+                break
 
     def parse_missiles(self, ship_id, missiles, scene_dict, current_time):
         missiles_dict = scene_dict["missiles"]
@@ -111,8 +109,8 @@ class FrameParser(object):
             physics_data = missile["physicsData"]
             location = Vector(physics_data["x"], physics_data["y"], physics_data["z"])
             velocity = Vector(physics_data["vx"], physics_data["vy"], physics_data["vz"])
-            type_id = int(get_str_id_from_href(missile["type"]["href"]))
-            respath = type_id_resource_mapper[type_id]
+            type_id = get_str_id_from_href(missile["type"]["href"])
+            respath = resource_mapper.get_graphic_file_from_type_id(type_id)
             if missile_id not in missiles_dict:
                 missiles_dict[missile_id] = {"owner": ship_id, "timeframes": {}, "respath": respath}
             missiles_dict[missile_id]["timeframes"].update(
@@ -145,31 +143,30 @@ def get_scene_name_from_match_json(match_json):
         blue=match_json["blueTeam"]["teamName"]
     )
 
-def get_scene_dict():
+def get_scene_dict(target_url):
     scene_dict = {
         "ships": {},
         "missiles": {}
     }
-
-    that_url = r"http://public-crest.eveonline.com/tournaments/4/series/120/matches/0/"
-    match_json = fetch_json_from_endpoint(requests, that_url)
+    match_json = fetch_json_from_endpoint(requests, target_url)
 
     scene_dict["scene_name"] =  get_scene_name_from_match_json(match_json)
 
     staticSceneData = fetch_json_from_endpoint(requests, match_json["staticSceneData"]["href"])
     ships = staticSceneData["ships"]
+    scene_dict["nebula_name"] = staticSceneData["nebulaName"]
 
     for ship in ships:
         ship_name = ship["type"]["name"]
         ship_url = ship["item"]["href"]
         ship_item_id = get_str_id_from_href(ship_url)
-        respath = type_id_resource_mapper[int(ship["type"]["href"].split("/")[-2])]
+        respath = resource_mapper.get_graphic_file_from_type_id(get_str_id_from_href(ship["type"]["href"]))
         scene_dict[ship_item_id] = {}
         scene_dict[ship_item_id]["respath"] = respath
         slot = 0
         scene_dict[ship_item_id]["turrets"] = {}
         for turret in ship["turrets"]:
-            respath = grapic_id_resource_mapper[int(turret["graphicResource"]["href"].split("/")[-2])]
+            respath = resource_mapper.get_graphic_file_from_graphic_id(get_str_id_from_href(turret["graphicResource"]["href"]))
             scene_dict[ship_item_id]["turrets"][slot] = respath
             slot += 1
 

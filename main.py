@@ -42,7 +42,7 @@ def get_starting_camera_position_and_interest(scene_dict):
 
 def create_scene_file_header(scene_dict, scene_file):
     scene_file.set_name(scene_dict["scene_name"])
-    scene_file.add_command(["scene", "m10"])
+    scene_file.add_command(["scene", scene_dict["nebula_name"]])
     scene_file.add_command(["camera", "main", 1.57, 3.0, 100000.0])
     position, interest = get_starting_camera_position_and_interest(scene_dict)
     scene_file.add_command(["set_position", "main", position])
@@ -139,11 +139,11 @@ def save(scene_file, red_file, save_folder, scene_name):
     red_file.save(red_save_path)
 
 
-def main(save_folder):
+def main(target_url, save_folder):
     scene_file = probe.SceneFile()
     red_file = red.RedFile()
     print "Loading or fetching scene data"
-    scene_dict = crestscrape.get_scene_dict()
+    scene_dict = crestscrape.get_scene_dict(target_url)
     scene_name = scene_dict["scene_name"]
     print "Generating scene for", scene_name
 
@@ -159,6 +159,7 @@ def main(save_folder):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=DESCRIPTION)
+    parser.add_argument("target_url", help="The url that points to the tournament match endpoint")
     parser.add_argument("save_folder", help="A directory in which to save the generated scene data", default=".", nargs="?")
     args = parser.parse_args()
-    main(args.save_folder)
+    main(args.target_url, args.save_folder)
