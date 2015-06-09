@@ -86,6 +86,7 @@ class FrameParser(object):
         self.scene_dict = scene_dict
         self.first_frame = first_frame
         self.effects_processed = []
+        self.active_ships = set()
 
     def parse_frames(self, frame=None):
         if not frame:
@@ -132,6 +133,13 @@ class FrameParser(object):
                   "ammo_graphic_resource": ammo_graphic_resource,
                 })
 
+    def update_active_ships(self, ships_this_frame, scene_dict, current_time):
+        removed_ships = self.active_ships - ships_this_frame
+        self.active_ships = ships_this_frame
+        if not removed_ships:
+            return
+        scene_dict["removed_ships"][current_time] = list(removed_ships)
+
     def parse_frame(self, frame, scene_dict):
         t = (int(frame["time_str"])/ TIME_UNITS_PER_SECOND) - scene_dict["start_time"]
         found_ships = set()
@@ -144,6 +152,7 @@ class FrameParser(object):
             scene_dict["ships"][ship_id][t] = {
                 "location": Vector(*ship_position),
             }
+        self.update_active_ships(found_ships, scene_dict, t)
 
         effect_data = get_effect_data_from_frame(frame)
         for ship_id, effects in effect_data:
@@ -159,7 +168,8 @@ def get_scene_name_from_match_json(match_json):
 def get_scene_dict(target_url):
     scene_dict = {
         "ships": {},
-        "projectiles": {}
+        "projectiles": {},
+        "removed_ships": {},
     }
     match_json = fetch_json_from_endpoint(requests, target_url)
 

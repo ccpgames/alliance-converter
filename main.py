@@ -121,6 +121,21 @@ def add_timed_events(scene_dict, scene_file):
             for slot in slots:
                 timed_events[time_frame].append(["fire", source, slot, target, 0.0, ammo_graphic_resource])
 
+    ship_removal_dict = scene_dict["removed_ships"]
+    print ship_removal_dict
+
+    for time_frame in ship_removal_dict:
+        if time_frame not in timed_events:
+            timed_events[time_frame] = []
+        for actor in ship_removal_dict[time_frame]:
+            timed_explosion = ["explosion_for_actor", "explosion", "res:/fisfx/deathexplosion/death_h_generic.red", actor, 1.0]
+            timed_removal = ["remove_actor", actor]
+            timed_events[time_frame].append(timed_explosion)
+            removal_time_frame = time_frame + 0.1
+            if removal_time_frame not in timed_events:
+                timed_events[removal_time_frame] = []
+            timed_events[removal_time_frame].append(timed_removal)
+
     scene_file.add_timed_events(timed_events)
 
 
