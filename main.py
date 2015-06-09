@@ -40,7 +40,7 @@ def get_starting_camera_position_and_interest(scene_dict):
     return position.to_list(), interest.to_list()
 
 
-def create_scene_file_header(scene_dict, scene_file):
+def create_scene_file_header(scene_dict, scene_file, ship_to_follow):
     scene_file.set_name(scene_dict["scene_name"])
     scene_file.add_command(["scene", scene_dict["nebula_name"]])
     scene_file.add_command(["camera", "main", 1.57, 3.0, 100000.0])
@@ -48,6 +48,8 @@ def create_scene_file_header(scene_dict, scene_file):
     scene_file.add_command(["set_position", "main", position])
     scene_file.add_command(["set_interest", "main", interest])
     scene_file.add_command(["select_camera", "main"])
+    if ship_to_follow is not None:
+        scene_file.add_command(["add_behavior", "main", "Follow", ship_to_follow, 300])
 
 
 def fit_turrets_to_ship(scene_dict, scene_file, ship_id):
@@ -106,22 +108,18 @@ def wait_for_loads(scene_file):
 
 def add_timed_events(scene_dict, scene_file):
     timed_events = {}
-    missiles_dict = scene_dict["missiles"]
-    for missile_id in missiles_dict:
-        missile_dict = missiles_dict[missile_id]
-        timeframes = sorted(missile_dict["timeframes"])
-        first_frame = timeframes[0]
-        last_frame = timeframes[-1]
-        last_location = missile_dict["timeframes"][last_frame]["location"]
-        target = get_closest_ship_at_timeframe(scene_dict, last_location, last_frame)
-        if first_frame not in timed_events:
-            timed_events[first_frame] = []
 
-        turrets = scene_dict[missile_dict["owner"]]["turrets"]
-        slot = random.randint(0, len(turrets) - 1)
-        slots = [slot]
-        repeat_rate = 0
-        timed_events[first_frame].append(["fire_missile", missile_dict["owner"], slots, target, missile_dict["respath"], repeat_rate])
+    effects_dict = scene_dict["projectiles"]
+    for time_frame in effects_dict:
+        for firing_dict in effects_dict[time_frame]:
+            source = firing_dict["source_id"]
+            target = firing_dict["target_id"]
+            slots = firing_dict["slots"]
+            ammo_graphic_resource = firing_dict["ammo_graphic_resource"]
+            if time_frame not in timed_events:
+                timed_events[time_frame] = []
+            for slot in slots:
+                timed_events[time_frame].append(["fire", source, slot, target, 0.0, ammo_graphic_resource])
 
     scene_file.add_timed_events(timed_events)
 
@@ -139,15 +137,15 @@ def save(scene_file, red_file, save_folder, scene_name):
     red_file.save(red_save_path)
 
 
-def main(target_url, save_folder):
-    scene_file = probe.SceneFile()
+def main(target_url, save_folder, ship_to_follow):
+    scene_file = probe.SceneFile(ship_to_follow)
     red_file = red.RedFile()
     print "Loading or fetching scene data"
     scene_dict = crestscrape.get_scene_dict(target_url)
     scene_name = scene_dict["scene_name"]
     print "Generating scene for", scene_name
 
-    create_scene_file_header(scene_dict, scene_file)
+    create_scene_file_header(scene_dict, scene_file, ship_to_follow)
     add_initial_scene_data(scene_dict, scene_file, red_file)
     wait_for_loads(scene_file)
     add_timed_events(scene_dict, scene_file)
@@ -161,5 +159,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=DESCRIPTION)
     parser.add_argument("target_url", help="The url that points to the tournament match endpoint")
     parser.add_argument("save_folder", help="A directory in which to save the generated scene data", default=".", nargs="?")
+    parser.add_argument("-f", "--follow", help="The item-id of a ship that the camera should follow ", default=None, nargs="?")
     args = parser.parse_args()
-    main(args.target_url, args.save_folder)
+    main(args.target_url, args.save_folder, args.follow)

@@ -69,24 +69,23 @@ def get_physics_data_from_frame(frame):
     return results
 
 
-def get_missile_data_from_frame(frame):
-    results = []
-    ship_data = frame["blueTeamShipData"] + frame["redTeamShipData"]
-    for d in ship_data:
-        ship_id = str(d["itemRef"]["href"].split("/")[-2])
-        if "missiles" not in d:
-            continue
-        missiles = d["missiles"]
-        results.append((ship_id, missiles))
-    return results
+def get_effect_data_from_frame(frame):
+        results = []
+        ship_data = frame["blueTeamShipData"] + frame["redTeamShipData"]
+        for d in ship_data:
+            ship_id = get_str_id_from_href(d["itemRef"]["href"])
+            if "effects" not in d:
+                continue
+            effects = d["effects"]
+            results.append((ship_id, effects))
+        return results
 
 
 class FrameParser(object):
     def __init__(self, first_frame, scene_dict):
         self.scene_dict = scene_dict
         self.first_frame = first_frame
-        self.active_ships = set()
-        self.active_missiles = {}
+        self.effects_processed = []
 
     def parse_frames(self, frame=None):
         if not frame:
@@ -99,25 +98,39 @@ class FrameParser(object):
             except KeyError:
                 break
 
-    def parse_missiles(self, ship_id, missiles, scene_dict, current_time):
-        missiles_dict = scene_dict["missiles"]
-        if ship_id not in self.active_missiles:
-            self.active_missiles[ship_id] = set()
-        found_missiles = set()
-        for missile in missiles:
-            missile_id = str(missile["itemID_str"])
-            physics_data = missile["physicsData"]
-            location = Vector(physics_data["x"], physics_data["y"], physics_data["z"])
-            velocity = Vector(physics_data["vx"], physics_data["vy"], physics_data["vz"])
-            type_id = get_str_id_from_href(missile["type"]["href"])
-            respath = resource_mapper.get_graphic_file_from_type_id(type_id)
-            if missile_id not in missiles_dict:
-                missiles_dict[missile_id] = {"owner": ship_id, "timeframes": {}, "respath": respath}
-            missiles_dict[missile_id]["timeframes"].update(
-            {
-                current_time: {
-                    "location": location,
-            }})
+    def parse_effects(self, ship_id, effects, scene_dict, current_time):
+        projectile_dict = scene_dict["projectiles"]
+        for effect in effects:
+            firing_effects = ("effects.ProjectileFired", "effects.MissileDeployment")
+            if effect["guid"] in firing_effects:
+                start_time = (effect["startTime"] / TIME_UNITS_PER_SECOND) - scene_dict["start_time"]
+                target_id = str(effect["targetID_str"])
+                graphic_id = get_str_id_from_href(effect["ammoGraphicResource"]["href"])
+
+                comparable_tuple = (effect["guid"], start_time, graphic_id, ship_id, target_id)
+                if comparable_tuple in self.effects_processed:
+                    continue
+                try:
+                    ammo_graphic_resource = resource_mapper.get_graphic_file_from_graphic_id(graphic_id)
+                except KeyError:
+                    print "Graphic id", graphic_id, "not found, using default."
+                    ammo_graphic_resource = resource_mapper.get_graphic_file_from_graphic_id("20043")
+                if start_time not in projectile_dict:
+                    projectile_dict[start_time] = []
+                slots = []
+                for module in effect["modules"]:
+                    module_id = module["moduleID_str"]
+                    slots.append(scene_dict[ship_id]["turret_module_id_to_slot"][module_id])
+
+
+                self.effects_processed.append(comparable_tuple)
+
+                projectile_dict[start_time].append({
+                  "source_id": str(ship_id),
+                  "target_id": target_id,
+                  "slots": slots,
+                  "ammo_graphic_resource": ammo_graphic_resource,
+                })
 
     def parse_frame(self, frame, scene_dict):
         t = (int(frame["time_str"])/ TIME_UNITS_PER_SECOND) - scene_dict["start_time"]
@@ -132,9 +145,9 @@ class FrameParser(object):
                 "location": Vector(*ship_position),
             }
 
-        missile_data = get_missile_data_from_frame(frame)
-        for ship_id, missiles in missile_data:
-            self.parse_missiles(ship_id, missiles, scene_dict, t)
+        effect_data = get_effect_data_from_frame(frame)
+        for ship_id, effects in effect_data:
+            self.parse_effects(ship_id, effects, scene_dict, t)
 
 
 def get_scene_name_from_match_json(match_json):
@@ -146,7 +159,7 @@ def get_scene_name_from_match_json(match_json):
 def get_scene_dict(target_url):
     scene_dict = {
         "ships": {},
-        "missiles": {}
+        "projectiles": {}
     }
     match_json = fetch_json_from_endpoint(requests, target_url)
 
@@ -165,8 +178,11 @@ def get_scene_dict(target_url):
         scene_dict[ship_item_id]["respath"] = respath
         slot = 0
         scene_dict[ship_item_id]["turrets"] = {}
+        scene_dict[ship_item_id]["turret_module_id_to_slot"] = {}
         for turret in ship["turrets"]:
             respath = resource_mapper.get_graphic_file_from_graphic_id(get_str_id_from_href(turret["graphicResource"]["href"]))
+            module_id = get_str_id_from_href(turret["href"])
+            scene_dict[ship_item_id]["turret_module_id_to_slot"][module_id] = slot
             scene_dict[ship_item_id]["turrets"][slot] = respath
             slot += 1
 
