@@ -127,7 +127,9 @@ def add_timed_events(scene_dict, scene_file):
         if time_frame not in timed_events:
             timed_events[time_frame] = []
         for actor in ship_removal_dict[time_frame]:
-            timed_explosion = ["explosion_for_actor", "explosion", "res:/fisfx/deathexplosion/death_h_generic.red", actor, 1.0]
+            race = scene_dict[actor]["race"]
+            explosion_resource_path = "res:/fisfx/deathexplosion/death_{size}_{race}.red".format(size="m", race=race)
+            timed_explosion = ["explosion_for_actor", "explosion", explosion_resource_path, actor, 1.0]
             timed_removal = ["remove_actor", actor]
             timed_events[time_frame].append(timed_explosion)
             removal_time_frame = time_frame + 0.1

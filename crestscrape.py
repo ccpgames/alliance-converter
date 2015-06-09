@@ -35,20 +35,30 @@ class ResourceMapper(object):
     def __init__(self):
         graphics_id_to_file_json = fetch_json_from_endpoint(requests, GRAPHICS_ID_TO_FILE_JSON_URL)
         type_id_to_graphics_id_json = fetch_json_from_endpoint(requests, TYPE_ID_TO_GRAPHICS_ID_JSON_URL)
-        self.d = {
+        self.graphic_file_dict = {
             "from_graphic_id" : {},
             "from_type_id": {},
         }
+        self.race_dict = {
+            "from_type_id": {},
+        }
         for type_id in type_id_to_graphics_id_json.keys():
-            self.d["from_type_id"][type_id] = str(graphics_id_to_file_json[str(type_id_to_graphics_id_json[type_id]["graphicID"])]["graphicFile"])
+            self.graphic_file_dict["from_type_id"][type_id] = str(graphics_id_to_file_json[str(type_id_to_graphics_id_json[type_id]["graphicID"])]["graphicFile"])
+            try:
+                self.race_dict["from_type_id"][type_id] = str(graphics_id_to_file_json[str(type_id_to_graphics_id_json[type_id]["graphicID"])]["race"])
+            except KeyError:
+                self.race_dict["from_type_id"][type_id] = "generic"
         for graphic_id in graphics_id_to_file_json.keys():
-            self.d["from_graphic_id"][graphic_id] = str(graphics_id_to_file_json[graphic_id]["graphicFile"])
+            self.graphic_file_dict["from_graphic_id"][graphic_id] = str(graphics_id_to_file_json[graphic_id]["graphicFile"])
 
     def get_graphic_file_from_type_id(self, key):
-        return self.d["from_type_id"][key]
+        return self.graphic_file_dict["from_type_id"][key]
+
+    def get_race_from_type_id(self, key):
+        return self.race_dict["from_type_id"][key]
 
     def get_graphic_file_from_graphic_id(self, key):
-        return self.d["from_graphic_id"][key]
+        return self.graphic_file_dict["from_graphic_id"][key]
 
 
 resource_mapper = ResourceMapper()
@@ -183,9 +193,12 @@ def get_scene_dict(target_url):
         ship_name = ship["type"]["name"]
         ship_url = ship["item"]["href"]
         ship_item_id = get_str_id_from_href(ship_url)
-        respath = resource_mapper.get_graphic_file_from_type_id(get_str_id_from_href(ship["type"]["href"]))
+        ship_type_id = get_str_id_from_href(ship["type"]["href"])
+        respath = resource_mapper.get_graphic_file_from_type_id(ship_type_id)
+        race = resource_mapper.get_race_from_type_id(ship_type_id)
         scene_dict[ship_item_id] = {}
         scene_dict[ship_item_id]["respath"] = respath
+        scene_dict[ship_item_id]["race"] = race
         slot = 0
         scene_dict[ship_item_id]["turrets"] = {}
         scene_dict[ship_item_id]["turret_module_id_to_slot"] = {}
