@@ -122,7 +122,6 @@ def add_timed_events(scene_dict, scene_file):
                 timed_events[time_frame].append(["fire", source, slot, target, 0.0, ammo_graphic_resource])
 
     ship_removal_dict = scene_dict["removed_ships"]
-    print ship_removal_dict
 
     for time_frame in ship_removal_dict:
         if time_frame not in timed_events:
