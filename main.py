@@ -1,7 +1,5 @@
 import argparse
 import os
-import math
-import random
 
 import crestscrape
 import geometry
@@ -10,21 +8,6 @@ import probe
 
 DESCRIPTION= "A tool to generate EveProbe scene files from alliance tournament \
 data that is fetched through public CREST."
-
-
-def get_closest_ship_at_timeframe(scene_dict, p, timeframe):
-    closest = None
-    min_distance = -1
-    for ship_id in scene_dict["ships"]:
-        ship_dict = scene_dict["ships"][ship_id]
-        if timeframe not in ship_dict:
-            continue
-        ship_position_vector = ship_dict[timeframe]["location"]
-        distance = (ship_position_vector - p).length_squared()
-        if closest is None or distance < min_distance:
-            min_distance = distance
-            closest = ship_id
-    return closest
 
 
 def get_starting_camera_position_and_interest(scene_dict):
@@ -57,25 +40,24 @@ def fit_turrets_to_ship(scene_dict, scene_file, ship_id):
         scene_file.fit_turret_to_actor(ship_id, respath, slot)
 
 
-def initialize_ship_red_file(scene_dict, red_file, ship_id):
-    ship_dict = scene_dict["ships"][ship_id]
-    frames = sorted(ship_dict.keys())
+def initialize_actor_red_file(actor_dict, red_file, ship_id):
+    frames = sorted(actor_dict.keys())
     start_time = frames[0]
     end_time = frames[-1]
 
-    start_pos = ship_dict[start_time]["location"]
-    end_pos = ship_dict[end_time]["location"]
+    start_pos = actor_dict[start_time]["location"]
+    end_pos = actor_dict[end_time]["location"]
 
     red_file.add_vector_curve(ship_id, 0.0, (end_time - start_time), start_pos, end_pos)
-    start_direction = ship_dict[frames[1]]["location"] - ship_dict[frames[0]]["location"]
-    end_direction = ship_dict[frames[-1]]["location"] - ship_dict[frames[-2]]["location"]
+    start_direction = actor_dict[frames[1]]["location"] - actor_dict[frames[0]]["location"]
+    end_direction = actor_dict[frames[-1]]["location"] - actor_dict[frames[-2]]["location"]
     red_file.add_rotation_curve(ship_id, 0.0, (end_time - start_time), start_direction, end_direction)
 
 
     last_time = start_time
     for time in frames:
-        red_file.add_vector_key(ship_id, ship_dict[time]["location"], time)
-        playback_velocity = ship_dict[time]["location"] - ship_dict[last_time]["location"]
+        red_file.add_vector_key(ship_id, actor_dict[time]["location"], time)
+        playback_velocity = actor_dict[time]["location"] - actor_dict[last_time]["location"]
         rotation_time = 0.001
         red_file.add_rotation_key(ship_id, playback_velocity, last_time + rotation_time / 2.0)
         red_file.add_rotation_key(ship_id, playback_velocity, time - rotation_time / 2.0)
@@ -92,11 +74,25 @@ def initialize_ship_scene_file(scene_dict, scene_file, ship_id):
 
     fit_turrets_to_ship(scene_dict, scene_file, ship_id)
 
+def initialize_drone_scene_file(scene_dict, scene_file, drone_id):
+    location_dict = scene_dict["drones"]["locations"][drone_id]
+    frames = sorted(location_dict.keys())
+    start_time = frames[0]
+    start_position = location_dict[start_time]["location"]
+    scene_file.add_command(["actor", drone_id, str(scene_dict["drones"][drone_id]["type_data"]["graphicID"]["sofDNA"])])
+    scene_file.set_actor_position(drone_id, start_position)
+
 
 def add_initial_scene_data(scene_dict, scene_file, red_file):
     for ship_id in scene_dict["ships"]:
         initialize_ship_scene_file(scene_dict, scene_file, ship_id)
-        initialize_ship_red_file(scene_dict, red_file, ship_id)
+        actor_dict = scene_dict["ships"][ship_id]
+        initialize_actor_red_file(actor_dict, red_file, ship_id)
+    for drone_id in scene_dict["drones"]["locations"]:
+        initialize_drone_scene_file(scene_dict, scene_file, drone_id)
+        actor_dict = scene_dict["drones"]["locations"][drone_id]
+        initialize_actor_red_file(actor_dict, red_file, drone_id)
+
     scene_name = scene_dict["scene_name"]
     scene_file.add_command(["bind_matching_dynamics", "res:/curves/{scene_name}.red".format(scene_name=scene_name)])
 
@@ -127,15 +123,31 @@ def add_timed_events(scene_dict, scene_file):
         if time_frame not in timed_events:
             timed_events[time_frame] = []
         for actor in ship_removal_dict[time_frame]:
-            race = scene_dict[actor]["race"]
-            explosion_resource_path = "res:/fisfx/deathexplosion/death_{size}_{race}.red".format(size="m", race=race)
-            timed_explosion = ["explosion_for_actor", "explosion", explosion_resource_path, actor, 1.0]
+            explosion_resource_path = scene_dict[actor]["explosion"]["path"]
+            explosion_scale = scene_dict[actor]["explosion"]["scale"]
+            timed_explosion = ["explosion_for_actor", "explosion", explosion_resource_path, actor, explosion_scale]
             timed_removal = ["remove_actor", actor]
             timed_events[time_frame].append(timed_explosion)
             removal_time_frame = time_frame + 0.1
             if removal_time_frame not in timed_events:
                 timed_events[removal_time_frame] = []
             timed_events[removal_time_frame].append(timed_removal)
+
+    drone_addition_dict = scene_dict["added_drones"]
+    for time_frame in drone_addition_dict:
+        if time_frame not in timed_events:
+            timed_events[time_frame] = []
+        for drone_id in drone_addition_dict[time_frame]:
+            add_command = ["add_actor", drone_id]
+            timed_events[time_frame].append(add_command)
+
+    drone_removal_dict = scene_dict["removed_drones"]
+    for time_frame in drone_removal_dict:
+        if time_frame not in timed_events:
+            timed_events[time_frame] = []
+        for drone_id in drone_removal_dict[time_frame]:
+            removal_command = ["remove_actor", drone_id]
+            timed_events[time_frame].append(removal_command)
 
     scene_file.add_timed_events(timed_events)
 
@@ -144,7 +156,7 @@ def save(scene_file, red_file, save_folder, scene_name):
     scene_save_folder_path = os.path.join(save_folder, "sequences")
     scene_save_path = os.path.join(scene_save_folder_path, "{scene_name}.yaml".format(scene_name=scene_name))
     if not os.path.exists(scene_save_folder_path):
-        os.mkdir(scene_save_folder_path)
+        os.makedirs(scene_save_folder_path)
     red_save_folder_path = os.path.join(save_folder, "curves")
     if not os.path.exists(red_save_folder_path):
         os.mkdir(red_save_folder_path)

@@ -179,8 +179,6 @@ class RedFile(object):
         vector_curve.keys.append(key)
 
     def add_rotation_curve(self, id, time_offset, length, start_value, end_value):
-        start_tangent = [0.0, 0.0, 0.0]
-        end_tangent = [0.0, 0.0, 0.0]
         if id not in self.curve_sets:
             curve_set = TriCurveSet(id)
             self.curve_sets[id] = curve_set
