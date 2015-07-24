@@ -26,3 +26,4 @@ python main.py https://public-crest.eveonline.com/tournaments/4/series/120/match
  - No planets or static objects at the current time.
  - Ship flight looks pretty choppy as ships fly in straight lines between points specified from the crest endpoints.
  - Until Galatea is released, this script can only be used on http://public-crest-sisi.testeveonline.com, so if you want to run the example, that would be http://public-crest-sisi.testeveonline.com/tournaments/4/series/120/matches/0/
+ - Make sure to run Eve Probe version 0.90.7403.0 or later (The probe version, not the launcher version. Can be viewed in the bottom-right corner of the Eve Probe launcher or the settings menu).
