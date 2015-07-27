@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 
 import requests
 import urlparse
@@ -26,6 +27,9 @@ def fetch_json_from_endpoint(crest_request, target_url):
         target_url = target_url.replace("/eve/graphics/", "/graphicids/")
     print "Fetching", target_url
     response = crest_request.get(target_url)
+    if not response.ok:
+        print "Server error:", response.status_code, response.reason
+        sys.exit(1)
     result = response.json()
     with open(file_path, 'w') as f:
         f.write(json.dumps(result))
@@ -255,6 +259,7 @@ def get_scene_dict(target_url):
         "removed_drones": {},
     }
     match_json = fetch_json_from_endpoint(requests, target_url)
+    crest_base_url = get_base_url(target_url)
 
     scene_dict["scene_name"] =  get_scene_name_from_match_json(match_json)
 
@@ -266,8 +271,10 @@ def get_scene_dict(target_url):
         ship_url = ship["item"]["href"]
         ship_item_id = get_str_id_from_href(ship_url)
         type_data = fetch_json_from_endpoint(requests, ship["type"]["href"])
-
-        respath = str(type_data["graphicID"]["sofDNA"])
+        try:
+            respath = str(type_data["graphicID"]["sofDNA"])
+        except KeyError:
+            respath = get_graphic_file_from_graphic_id(crest_base_url, type_data["graphicID"]["id_str"])
         race = respath.split(":")[-1]
         radius = type_data["radius"]
 
@@ -298,7 +305,6 @@ def get_scene_dict(target_url):
     scene_dict["end_time"] = int(lastReplayFrame["time_str"]) / TIME_UNITS_PER_SECOND
     scene_dict["duration"] = scene_dict["end_time"] - scene_dict["start_time"]
 
-    crest_base_url = get_base_url(target_url)
     frame_parser = FrameParser(crest_base_url, firstReplayFrame, scene_dict)
     frame_parser.parse_frames()
     return scene_dict
