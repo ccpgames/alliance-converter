@@ -2,6 +2,7 @@ import json
 import os
 
 import requests
+import urlparse
 
 from geometry import Vector
 
@@ -72,14 +73,16 @@ def get_drone_data_from_frame(frame):
     return results
 
 
-def get_graphic_file_from_graphic_id(graphic_id_str):
-    target_url = "https://public-crest.eveonline.com/graphicids/%s/" % graphic_id_str
+def get_graphic_file_from_graphic_id(base_url, graphic_id_str):
+    path = "/graphicids/%s/" % graphic_id_str
+    target_url = urlparse.urljoin(base_url, path)
     graphic_id_data = fetch_json_from_endpoint(requests, target_url)
     return graphic_id_data["graphicFile"]
 
 
 class FrameParser(object):
-    def __init__(self, first_frame, scene_dict):
+    def __init__(self, crest_base_url, first_frame, scene_dict):
+        self.crest_base_url = crest_base_url
         self.scene_dict = scene_dict
         self.first_frame = first_frame
         self.effects_processed = []
@@ -110,10 +113,10 @@ class FrameParser(object):
                 if comparable_tuple in self.effects_processed:
                     continue
                 try:
-                    ammo_graphic_resource = get_graphic_file_from_graphic_id(graphic_id)
+                    ammo_graphic_resource = get_graphic_file_from_graphic_id(self.crest_base_url, graphic_id)
                 except KeyError:
                     print "Graphic id", graphic_id, "not found, using default."
-                    ammo_graphic_resource = get_graphic_file_from_graphic_id("20043")
+                    ammo_graphic_resource = get_graphic_file_from_graphic_id(self.crest_base_url, "20043")
                 if start_time not in projectile_dict:
                     projectile_dict[start_time] = []
                 slots = []
@@ -237,6 +240,11 @@ def get_death_explosion_info(radius, raceName):
     return path, delay, scale
 
 
+def get_base_url(full_url):
+    parse_result = urlparse.urlparse(full_url)
+    return "{scheme}://{netloc}".format(scheme=parse_result.scheme, netloc=parse_result.netloc)
+
+
 def get_scene_dict(target_url):
     scene_dict = {
         "ships": {},
@@ -289,6 +297,8 @@ def get_scene_dict(target_url):
     scene_dict["start_time"] = int(firstReplayFrame["time_str"]) / TIME_UNITS_PER_SECOND
     scene_dict["end_time"] = int(lastReplayFrame["time_str"]) / TIME_UNITS_PER_SECOND
     scene_dict["duration"] = scene_dict["end_time"] - scene_dict["start_time"]
-    frame_parser = FrameParser(firstReplayFrame, scene_dict)
+
+    crest_base_url = get_base_url(target_url)
+    frame_parser = FrameParser(crest_base_url, firstReplayFrame, scene_dict)
     frame_parser.parse_frames()
     return scene_dict
