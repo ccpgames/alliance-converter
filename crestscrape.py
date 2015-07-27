@@ -263,6 +263,10 @@ def get_scene_dict(target_url):
 
     scene_dict["scene_name"] =  get_scene_name_from_match_json(match_json)
 
+    if "staticSceneData" not in match_json:
+        print "Static scene data does not exist on the server. Unable to create scene."
+        sys.exit(1)
+    
     staticSceneData = fetch_json_from_endpoint(requests, match_json["staticSceneData"]["href"])
     ships = staticSceneData["ships"]
     scene_dict["nebula_name"] = staticSceneData["nebulaName"]
