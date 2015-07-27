@@ -49,8 +49,11 @@ def initialize_actor_red_file(actor_dict, red_file, ship_id):
     end_pos = actor_dict[end_time]["location"]
 
     red_file.add_vector_curve(ship_id, 0.0, (end_time - start_time), start_pos, end_pos)
-    start_direction = actor_dict[frames[1]]["location"] - actor_dict[frames[0]]["location"]
-    end_direction = actor_dict[frames[-1]]["location"] - actor_dict[frames[-2]]["location"]
+    if len(frames) > 1:
+        start_direction = actor_dict[frames[1]]["location"] - actor_dict[frames[0]]["location"]
+        end_direction = actor_dict[frames[-1]]["location"] - actor_dict[frames[-2]]["location"]
+    else:
+        start_direction = end_direction = geometry.Vector(0.0, 0.0, 0.0)
     red_file.add_rotation_curve(ship_id, 0.0, (end_time - start_time), start_direction, end_direction)
 
 
